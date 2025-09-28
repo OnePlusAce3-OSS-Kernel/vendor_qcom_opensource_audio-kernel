@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -638,6 +638,10 @@ static int wcd939x_parse_port_mapping(struct device *dev,
 
 	for (i = 0; i < map_length; i++) {
 		port_num = dt_array[NUM_SWRS_DT_PARAMS * i];
+		if (port_num >= MAX_PORT || ch_iter >= MAX_CH_PER_PORT) {
+			dev_err(dev, "%s: Invalid port or channel number\n", __func__);
+			goto err_pdata_fail;
+		}
 		slave_port_type = dt_array[NUM_SWRS_DT_PARAMS * i + 1];
 		ch_mask = dt_array[NUM_SWRS_DT_PARAMS * i + 2];
 		ch_rate = dt_array[NUM_SWRS_DT_PARAMS * i + 3];
@@ -4687,7 +4691,12 @@ static int wcd939x_reset(struct device *dev)
 	if (rc) {
 		dev_err_ratelimited(dev, "%s: wcd sleep state request fail!\n",
 				__func__);
+#ifndef OPLUS_ARCH_EXTENDS
+		/* fix wcd prob err when msm-cdc-pinctrl prob delay,CR3717597 */
 		return rc;
+#else /* OPLUS_ARCH_EXTENDS */
+		return -EPROBE_DEFER;
+#endif /* OPLUS_ARCH_EXTENDS */
 	}
 	/* 20us sleep required after pulling the reset gpio to LOW */
 	usleep_range(20, 30);
@@ -4696,7 +4705,12 @@ static int wcd939x_reset(struct device *dev)
 	if (rc) {
 		dev_err_ratelimited(dev, "%s: wcd active state request fail!\n",
 				__func__);
+#ifndef OPLUS_ARCH_EXTENDS
+		/* fix wcd prob err when msm-cdc-pinctrl prob delay,CR3717597 */
 		return rc;
+#else /* OPLUS_ARCH_EXTENDS */
+		return -EPROBE_DEFER;
+#endif /* OPLUS_ARCH_EXTENDS */
 	}
 	/* 20us sleep required after pulling the reset gpio to HIGH */
 	usleep_range(20, 30);
@@ -5379,7 +5393,16 @@ static int wcd939x_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_lock_init;
 
+#ifndef OPLUS_ARCH_EXTENDS
+	/* fix wcd prob err when msm-cdc-pinctrl prob delay,CR3717597 */
 	wcd939x_reset(dev);
+#else /* OPLUS_ARCH_EXTENDS */
+	ret = wcd939x_reset(dev);
+	if (ret == -EPROBE_DEFER) {
+		dev_err(dev, "%s: wcd reset failed!\n", __func__);
+		goto err_lock_init;
+	}
+#endif /* OPLUS_ARCH_EXTENDS */
 
 	wcd939x->wakeup = wcd939x_wakeup;
 
